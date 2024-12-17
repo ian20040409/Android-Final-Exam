@@ -219,7 +219,9 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                     } else {
                         Toast.makeText(context, "請先選擇日期", Toast.LENGTH_SHORT).show()
                     }
-                }
+                },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Memo")
             }
@@ -620,39 +622,44 @@ fun PreviewCalendarScreen() {
 }
 
 
+
 @Composable
 fun SeasonalTheme(month: Month, content: @Composable () -> Unit) {
     val colors = when (month) {
         Month.MARCH, Month.APRIL, Month.MAY -> {
-            // 春季：深綠 + 深粉 + 淡綠背景
             lightColorScheme(
-                primary = Color(0xFF388E3C),   // 深綠 (Green 700)
-                secondary = Color(0xFFD81B60), // 深粉 (Pink 700)
-                background = Color(0x2C9AFD9D) // 淡綠 (Green 200)
+                primary = Color(0xFF388E3C),   // 深綠
+                secondary = Color(0xFFD81B60), // 深粉
+                background = Color(0xFFF0FFF0), // 帶淡綠調的白色背景
+                primaryContainer = Color(0xFF81C784), // 比較淺的綠色容器
+                onPrimaryContainer = Color.White
             )
         }
         Month.JUNE, Month.JULY, Month.AUGUST -> {
-            // 夏季：深紅 + 深粉紅 + 淡粉紅背景
             lightColorScheme(
-                primary = Color(0xFFD32F2F),   // 深紅 (Red 700)
-                secondary = Color(0xFFC2185B), // 深粉紅 (Pink 800)
-                background = Color(0x25FD9090) // 淡粉紅 (Red 100)
+                primary = Color(0xFFD32F2F),   // 深紅
+                secondary = Color(0xFFC2185B), // 深粉紅
+                background = Color(0xFFFFF5F5), // 帶淡粉紅調的白色背景
+                primaryContainer = Color(0xFFFFCDD2), // 淺粉紅容器
+                onPrimaryContainer = Color.Black
             )
         }
         Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER -> {
-            // 秋季：深咖啡 + 稍深棕灰 + 淡棕灰背景
             lightColorScheme(
-                primary = Color(0xFF5D4037),   // 深棕 (Brown 700)
-                secondary = Color(0xFF6D4C41), // 稍深棕灰 (Brown 600)
-                background = Color(0x36FFB03C) // 淡棕灰 (Brown 100)
+                primary = Color(0xFF5D4037),   // 深咖啡棕
+                secondary = Color(0xFF6D4C41), // 稍深棕灰
+                background = Color(0xFFF5F5DC), // 淡米黃色背景
+                primaryContainer = Color(0xFFD7CCC8), // 淺棕灰容器
+                onPrimaryContainer = Color.Black
             )
         }
         else -> {
-            // 冬季：深藍 + 深灰藍 + 淡藍背景
             lightColorScheme(
-                primary = Color(0xFF1976D2),   // 深藍 (Blue 700)
-                secondary = Color(0xFF455A64), // 深灰藍 (Blue Grey 700)
-                background = Color(0x258DC6F8) // 淡藍 (Blue 100)
+                primary = Color(0xFF1976D2),   // 深藍
+                secondary = Color(0xFF455A64), // 深灰藍
+                background = Color(0xFFF0F8FF), // 帶淡藍調的白色背景
+                primaryContainer = Color(0xFFBBDEFB), // 淺藍容器
+                onPrimaryContainer = Color.Black
             )
         }
     }
@@ -664,7 +671,6 @@ fun SeasonalTheme(month: Month, content: @Composable () -> Unit) {
         content = content
     )
 }
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
