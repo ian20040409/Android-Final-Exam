@@ -648,7 +648,7 @@ fun SeasonalTheme(month: Month, content: @Composable () -> Unit) {
             lightColorScheme(
                 primary = Color(0xFF5D4037),   // 深咖啡棕
                 secondary = Color(0xFF6D4C41), // 稍深棕灰
-                background = Color(0xFFF5F5DC), // 淡米黃色背景
+                background = Color(0x19BF680C), // 淡米黃色背景
                 primaryContainer = Color(0xFFD7CCC8), // 淺棕灰容器
                 onPrimaryContainer = Color.Black
             )
