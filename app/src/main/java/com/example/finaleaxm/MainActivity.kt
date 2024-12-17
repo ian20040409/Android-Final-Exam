@@ -47,6 +47,11 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.util.concurrent.TimeUnit
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import java.time.Month
 
 // Memo 資料類型
 data class Memo(val date: LocalDate, val time: LocalTime?, val content: String)
@@ -614,14 +619,61 @@ fun PreviewCalendarScreen() {
     CalendarScreen(context = LocalContext.current)
 }
 
+
+@Composable
+fun SeasonalTheme(month: Month, content: @Composable () -> Unit) {
+    val colors = when (month) {
+        Month.MARCH, Month.APRIL, Month.MAY -> {
+            // 春季：深綠 + 深粉 + 淡綠背景
+            lightColorScheme(
+                primary = Color(0xFF388E3C),   // 深綠 (Green 700)
+                secondary = Color(0xFFD81B60), // 深粉 (Pink 700)
+                background = Color(0x2C9AFD9D) // 淡綠 (Green 200)
+            )
+        }
+        Month.JUNE, Month.JULY, Month.AUGUST -> {
+            // 夏季：深紅 + 深粉紅 + 淡粉紅背景
+            lightColorScheme(
+                primary = Color(0xFFD32F2F),   // 深紅 (Red 700)
+                secondary = Color(0xFFC2185B), // 深粉紅 (Pink 800)
+                background = Color(0x25FD9090) // 淡粉紅 (Red 100)
+            )
+        }
+        Month.SEPTEMBER, Month.OCTOBER, Month.NOVEMBER -> {
+            // 秋季：深咖啡 + 稍深棕灰 + 淡棕灰背景
+            lightColorScheme(
+                primary = Color(0xFF5D4037),   // 深棕 (Brown 700)
+                secondary = Color(0xFF6D4C41), // 稍深棕灰 (Brown 600)
+                background = Color(0x36FFB03C) // 淡棕灰 (Brown 100)
+            )
+        }
+        else -> {
+            // 冬季：深藍 + 深灰藍 + 淡藍背景
+            lightColorScheme(
+                primary = Color(0xFF1976D2),   // 深藍 (Blue 700)
+                secondary = Color(0xFF455A64), // 深灰藍 (Blue Grey 700)
+                background = Color(0x258DC6F8) // 淡藍 (Blue 100)
+            )
+        }
+    }
+
+    MaterialTheme(
+        colorScheme = colors,
+        typography = MaterialTheme.typography,
+        shapes = MaterialTheme.shapes,
+        content = content
+    )
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         createNotificationChannel()
         setContent {
-            MaterialTheme {
-                CalendarScreen(viewModel = viewModel(), context = this)
+            val viewModel: CalendarViewModel = viewModel()
+            SeasonalTheme(month = viewModel.currentMonth.month) {
+                CalendarScreen(viewModel = viewModel, context = this)
             }
         }
     }
