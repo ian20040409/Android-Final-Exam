@@ -1,7 +1,10 @@
 package com.example.finaleaxm
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -35,13 +38,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.work.*
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
+import java.util.concurrent.TimeUnit
 
 // Memo 資料類型
-data class Memo(val date: LocalDate, val content: String)
+data class Memo(val date: LocalDate, val time: LocalTime?, val content: String)
 
 // ViewModel，處理日曆與備忘錄邏輯
 class CalendarViewModel : ViewModel() {
@@ -69,11 +77,12 @@ class CalendarViewModel : ViewModel() {
         val prefs: SharedPreferences = context.getSharedPreferences("MemoPrefs", Context.MODE_PRIVATE)
         val memoString = prefs.getString("Memos", "")
         memos = memoString?.split(";")?.mapNotNull {
-            val parts = it.split(":")
+            val parts = it.split("|")
             try {
                 val date = LocalDate.parse(parts[0])
-                val content = parts[1]
-                Memo(date, content)
+                val time = if (parts[1] != "null") LocalTime.parse(parts[1]) else null
+                val content = parts[2]
+                Memo(date, time, content)
             } catch (e: Exception) {
                 null
             }
@@ -82,10 +91,8 @@ class CalendarViewModel : ViewModel() {
 
     fun saveMemos(context: Context) {
         val prefs: SharedPreferences = context.getSharedPreferences("MemoPrefs", Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        val memoStrings = memos.joinToString(";") { "${it.date}:${it.content}" }
-        editor.putString("Memos", memoStrings)
-        editor.apply()
+        val memoStrings = memos.joinToString(";") { "${it.date}|${it.time}|${it.content}" }
+        prefs.edit().putString("Memos", memoStrings).apply()
     }
 
     fun removeMemo(memo: Memo) {
@@ -101,36 +108,46 @@ fun CalendarGrid(
     onDateClick: (LocalDate) -> Unit,
     isDialogVisible: Boolean
 ) {
-    LazyVerticalGrid(columns = GridCells.Fixed(7), modifier = Modifier.padding(16.dp)) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(7),
+        modifier = Modifier.padding(16.dp),
+    ) {
+        // 星期標題
         val daysOfWeek = listOf("日", "一", "二", "三", "四", "五", "六")
         items(7) { index ->
             Text(
                 text = daysOfWeek[index],
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = if (index == 0 || index == 6) Color.Red else Color.Gray // 禮拜六、日為紅色
+                ),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp)
             )
         }
 
         val daysInMonth = currentMonth.lengthOfMonth()
         val firstDayOfWeek = currentMonth.atDay(1).dayOfWeek.value % 7
-        items(firstDayOfWeek) { Spacer(modifier = Modifier.size(80.dp)) }
+        items(firstDayOfWeek) { Spacer(modifier = Modifier.size(70.dp)) }
 
         items(daysInMonth) { day ->
             val date = currentMonth.atDay(day + 1)
             val dateMemos = memos.filter { it.date == date }
             val isSelected = date == selectedDate
-            val isToday = date == LocalDate.now() // 判斷是否為今天
+            val isToday = date == LocalDate.now()
             Box(
                 modifier = Modifier
-                    .size(80.dp)
+                    .size(70.dp) // 格子變大
                     .padding(4.dp)
                     .background(
-                        color = if (isToday) Color.LightGray else Color.Transparent
+                        color = if (isToday) Color(0xFFBBDEFB) else Color.Transparent,
+                        shape = MaterialTheme.shapes.small
                     )
                     .border(
-                        width = if (isSelected) 2.dp else 0.dp,
-                        color = if (isSelected) Color.Red else Color.Transparent
+                        width = if (isSelected) 3.dp else 1.dp, // 選中的邊框加粗
+                        color = if (isSelected) Color(0xFF1976D2) else Color.LightGray,
+                        shape = MaterialTheme.shapes.small
                     )
                     .clickable(enabled = !isDialogVisible) { onDateClick(date) },
                 contentAlignment = Alignment.TopCenter
@@ -138,17 +155,25 @@ fun CalendarGrid(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = date.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge, // 日期字體稍微加大
                         textAlign = TextAlign.Center
                     )
-                    // 備忘錄顯示，每個最多顯示3個字
-                    dateMemos.take(2).forEach {
-                        Text(
-                            text = if (it.content.length > 3) "${it.content.take(3)}..." else it.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
+                    if (dateMemos.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .size(24.dp) // 提醒數量的徽章變大
+                                .background(
+                                    color = Color.Red,
+                                    shape = MaterialTheme.shapes.medium
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dateMemos.size.toString(),
+                                style = MaterialTheme.typography.bodySmall.copy(color = Color.White)
+                            )
+                        }
                     }
                 }
             }
@@ -164,13 +189,15 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
     val memos = viewModel.memos
     var memoText by remember { mutableStateOf("") }
     var showDialog by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
 
     var showYearMonthPicker by remember { mutableStateOf(false) }
 
     // 用於動畫方向判斷 (-1=前一月, 1=下一月, 0=無方向)
     var direction by remember { mutableStateOf(0) }
 
-    val memosInDialog = remember { mutableStateListOf<String>() }
+    val memosInDialog = remember { mutableStateListOf<Memo>() }
 
     LaunchedEffect(Unit) { viewModel.loadMemos(context) }
 
@@ -181,7 +208,6 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                     if (viewModel.selectedDate != null) {
                         val selectedDateMemos = viewModel.memos
                             .filter { it.date == viewModel.selectedDate }
-                            .map { it.content }
                         memosInDialog.clear()
                         memosInDialog.addAll(selectedDateMemos)
                         showDialog = true
@@ -301,7 +327,7 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth(0.8f)
-                            .heightIn(min = 300.dp, max = 400.dp)
+                            .heightIn(min = 300.dp, max = 500.dp)
                             .background(Color.White, MaterialTheme.shapes.medium)
                             .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -338,11 +364,19 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                                         .padding(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = memo,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = memo.content,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        memo.time?.let {
+                                            Text(
+                                                text = it.toString(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
                                     selectedDate?.let {
                                         Text(
                                             text = it.toString(),
@@ -352,12 +386,9 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                                     }
                                     IconButton(
                                         onClick = {
-                                            val matchingMemo = viewModel.memos.find { it.date == viewModel.selectedDate && it.content == memo }
-                                            if (matchingMemo != null) {
-                                                viewModel.removeMemo(matchingMemo)
-                                                viewModel.saveMemos(context)
-                                                memosInDialog.remove(memo)
-                                            }
+                                            viewModel.removeMemo(memo)
+                                            viewModel.saveMemos(context)
+                                            memosInDialog.remove(memo)
                                         }
                                     ) {
                                         Icon(Icons.Default.Delete, contentDescription = "Delete Memo", tint = Color.Red)
@@ -367,33 +398,60 @@ fun CalendarScreen(viewModel: CalendarViewModel = viewModel(), context: Context)
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             TextField(
                                 value = memoText,
                                 onValueChange = { memoText = it },
                                 label = { Text("輸入備忘錄") },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             )
-                            IconButton(
-                                onClick = {
-                                    if (memoText.isNotEmpty() && viewModel.selectedDate != null) {
-                                        val newMemo = Memo(viewModel.selectedDate!!, memoText)
-                                        viewModel.addMemo(newMemo)
-                                        viewModel.saveMemos(context)
-                                        memosInDialog.add(memoText)
-                                        memoText = ""
-                                    }
-                                }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Add Memo")
+                                TextButton(onClick = { showTimePicker = true }) {
+                                    Text(if (selectedTime != null) "選擇時間: ${selectedTime}" else "選擇提醒時間")
+                                }
+                                IconButton(
+                                    onClick = {
+                                        if (memoText.isNotEmpty() && viewModel.selectedDate != null) {
+                                            val newMemo = Memo(
+                                                viewModel.selectedDate!!,
+                                                selectedTime,
+                                                memoText
+                                            )
+                                            viewModel.addMemo(newMemo)
+                                            viewModel.saveMemos(context)
+                                            memosInDialog.add(newMemo)
+                                            // 排程通知
+                                            scheduleMemoReminder(context, newMemo)
+                                            memoText = ""
+                                            selectedTime = null
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Add Memo")
+                                }
                             }
-
                         }
                     }
                 }
+            }
+
+            // 時間選擇器對話框
+            if (showTimePicker) {
+                TimePickerDialog(
+                    onDismiss = { showTimePicker = false },
+                    onConfirm = { hour, minute ->
+                        selectedTime = LocalTime.of(hour, minute)
+                        showTimePicker = false
+                    }
+                )
             }
 
             // 顯示 YearMonthPickerDialog
@@ -478,6 +536,78 @@ fun YearMonthPickerDialog(
     )
 }
 
+@Composable
+fun TimePickerDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (hour: Int, minute: Int) -> Unit
+) {
+    var selectedHour by remember { mutableStateOf(LocalTime.now().hour) }
+    var selectedMinute by remember { mutableStateOf(LocalTime.now().minute) }
+
+    AlertDialog(
+        onDismissRequest = { onDismiss() },
+        title = { Text("選擇提醒時間") },
+        text = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // 時
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("時", style = MaterialTheme.typography.bodyMedium)
+                    NumberPicker(
+                        value = selectedHour,
+                        onValueChange = { selectedHour = it },
+                        range = 0..23
+                    )
+                }
+                // 分
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("分", style = MaterialTheme.typography.bodyMedium)
+                    NumberPicker(
+                        value = selectedMinute,
+                        onValueChange = { selectedMinute = it },
+                        range = 0..59
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
+                Text("確定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onDismiss() }) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+fun NumberPicker(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange
+) {
+    AndroidView(
+        factory = { context ->
+            NumberPicker(context).apply {
+                minValue = range.first
+                maxValue = range.last
+                this.value = value
+                setOnValueChangedListener { _, _, newVal ->
+                    onValueChange(newVal)
+                }
+            }
+        },
+        modifier = Modifier
+            .width(60.dp)
+            .height(100.dp)
+    )
+}
+
 @Preview(showBackground = true)
 @Composable
 fun PreviewCalendarScreen() {
@@ -488,10 +618,68 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        createNotificationChannel()
         setContent {
             MaterialTheme {
                 CalendarScreen(viewModel = viewModel(), context = this)
             }
         }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Memo Reminders"
+            val descriptionText = "Channel for memo reminders"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel("memo_reminder_channel", name, importance).apply {
+                description = descriptionText
+            }
+            // Register the channel with the system
+            val notificationManager: NotificationManager =
+                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+}
+
+// 排程提醒的函數和 WorkManager 的 Worker
+fun scheduleMemoReminder(context: Context, memo: Memo) {
+    memo.time?.let { time ->
+        val now = java.time.LocalDateTime.now()
+        val memoDateTime = memo.date.atTime(time)
+        val delay = java.time.Duration.between(now, memoDateTime).toMillis()
+        if (delay > 0) {
+            val data = Data.Builder()
+                .putString("content", memo.content)
+                .build()
+
+            val workRequest = OneTimeWorkRequestBuilder<MemoReminderWorker>()
+                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                .setInputData(data)
+                .build()
+
+            WorkManager.getInstance(context).enqueue(workRequest)
+        }
+    }
+}
+
+class MemoReminderWorker(appContext: Context, workerParams: WorkerParameters) :
+    Worker(appContext, workerParams) {
+
+    override fun doWork(): Result {
+        val content = inputData.getString("content") ?: return Result.failure()
+
+        val builder = NotificationCompat.Builder(applicationContext, "memo_reminder_channel")
+            .setSmallIcon(R.drawable.ic_notification) // 確保有此圖標資源
+            .setContentTitle("備忘錄提醒")
+            .setContentText(content)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+
+        with(NotificationManagerCompat.from(applicationContext)) {
+            notify(System.currentTimeMillis().toInt(), builder.build())
+        }
+
+        return Result.success()
     }
 }
